@@ -12,7 +12,7 @@ def create_app():
 
     init_db(app)
 
-    from app import models  # noqa: F401 - registers models with Peewee
+    from app import models
 
     register_routes(app)
 
