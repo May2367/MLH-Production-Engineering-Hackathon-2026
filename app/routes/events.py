@@ -1,8 +1,10 @@
+import csv
 import json
 from datetime import datetime
 from flask import Blueprint, jsonify, request
 from playhouse.shortcuts import model_to_dict
 from app.models.events import Event
+from app.database import db
 
 events_bp = Blueprint("events", __name__)
 
@@ -68,22 +70,32 @@ def create_event():
 
 @events_bp.route("/events/bulk", methods=["POST"])
 def bulk_load_events():
+    data = None
     if request.is_json:
         data = request.get_json()
-    else:
-        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+    if not data:
+        data = request.get_json(force=True, silent=True)
+    if not data:
+        data = request.form.to_dict()
 
     if not data or "file" not in data:
         return jsonify({"error": "Missing file field"}), 400
 
     try:
-        from peewee import chunked
         with open(f"data/{data['file']}", newline="") as f:
             rows = list(csv.DictReader(f))
+
+        from peewee import chunked
         with db.atomic():
             for batch in chunked(rows, 100):
                 Event.insert_many(batch).on_conflict_ignore().execute()
-        return jsonify({"message": f"Loaded {len(rows)} events", "row_count": len(rows)}), 201
+
+        db.execute_sql("SELECT setval(pg_get_serial_sequence('event', 'id'), (SELECT MAX(id) FROM event));")
+
+        return jsonify({
+            "message": f"Loaded {len(rows)} events",
+            "row_count": len(rows)
+        }), 201
     except FileNotFoundError:
         return jsonify({"error": f"File not found: {data['file']}"}), 404
     except Exception as e:

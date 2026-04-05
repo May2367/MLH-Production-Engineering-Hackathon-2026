@@ -1,3 +1,4 @@
+import csv
 import random
 import string
 from datetime import datetime
@@ -5,6 +6,7 @@ from flask import Blueprint, jsonify, request, redirect
 from playhouse.shortcuts import model_to_dict
 from app.models.url import Url
 from app.models.events import Event
+from app.database import db
 
 urls_bp = Blueprint("urls", __name__)
 
@@ -79,24 +81,35 @@ def create_url():
 
 @urls_bp.route("/urls/bulk", methods=["POST"])
 def bulk_load_urls():
+    data = None
     if request.is_json:
         data = request.get_json()
-    else:
-        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+    if not data:
+        data = request.get_json(force=True, silent=True)
+    if not data:
+        data = request.form.to_dict()
 
     if not data or "file" not in data:
         return jsonify({"error": "Missing file field"}), 400
 
     try:
-        from peewee import chunked
         with open(f"data/{data['file']}", newline="") as f:
             rows = list(csv.DictReader(f))
+
         for r in rows:
             r['is_active'] = r['is_active'] == 'True'
+
+        from peewee import chunked
         with db.atomic():
             for batch in chunked(rows, 100):
                 Url.insert_many(batch).on_conflict_ignore().execute()
-        return jsonify({"message": f"Loaded {len(rows)} urls", "row_count": len(rows)}), 201
+
+        db.execute_sql("SELECT setval(pg_get_serial_sequence('url', 'id'), (SELECT MAX(id) FROM url));")
+
+        return jsonify({
+            "message": f"Loaded {len(rows)} urls",
+            "row_count": len(rows)
+        }), 201
     except FileNotFoundError:
         return jsonify({"error": f"File not found: {data['file']}"}), 404
     except Exception as e:

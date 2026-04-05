@@ -84,10 +84,13 @@ def delete_user(user_id):
 
 @users_bp.route("/users/bulk", methods=["POST"])
 def bulk_load_users():
+    data = None
     if request.is_json:
         data = request.get_json()
-    else:
-        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+    if not data:
+        data = request.get_json(force=True, silent=True)
+    if not data:
+        data = request.form.to_dict()
 
     if not data or "file" not in data:
         return jsonify({"error": "Missing file field"}), 400
@@ -100,6 +103,8 @@ def bulk_load_users():
         with db.atomic():
             for batch in chunked(rows, 100):
                 User.insert_many(batch).on_conflict_ignore().execute()
+
+        db.execute_sql("SELECT setval(pg_get_serial_sequence('\"user\"', 'id'), (SELECT MAX(id) FROM \"user\"));")
 
         return jsonify({
             "message": f"Loaded {len(rows)} users",
