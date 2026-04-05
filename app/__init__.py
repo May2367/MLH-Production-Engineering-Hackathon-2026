@@ -21,3 +21,13 @@ def create_app():
         return jsonify(status="ok")
 
     return app
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({"error": "Resource not found"}), 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return jsonify({"error": "Internal server error"}), 500
+
+    return app
