@@ -85,3 +85,8 @@ with app.app_context():
     load_users()
     load_urls()
     load_events()
+
+    db.execute_sql("SELECT setval(pg_get_serial_sequence('url', 'id'), (SELECT MAX(id) FROM url));")
+    db.execute_sql("SELECT setval(pg_get_serial_sequence('\"user\"', 'id'), (SELECT MAX(id) FROM \"user\"));")
+    db.execute_sql("SELECT setval(pg_get_serial_sequence('event', 'id'), (SELECT MAX(id) FROM event));")
+    print("Sequences reset.")

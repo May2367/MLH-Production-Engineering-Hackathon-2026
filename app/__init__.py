@@ -9,9 +9,7 @@ from app.routes import register_routes
 def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-
     handler = logging.StreamHandler()
-
     formatter = jsonlogger.JsonFormatter(
         fmt="%(asctime)s %(levelname)s %(message)s",
         rename_fields={"asctime": "timestamp", "levelname": "level"}
@@ -28,7 +26,15 @@ def create_app():
 
     app = Flask(__name__)
     init_db(app)
-    from app import models
+
+    with app.app_context():
+        from app import models
+        from app.database import db
+        from app.models.user import User
+        from app.models.url import Url
+        from app.models.events import Event
+        db.create_tables([User, Url, Event], safe=True)
+
     register_routes(app)
 
     @app.after_request
