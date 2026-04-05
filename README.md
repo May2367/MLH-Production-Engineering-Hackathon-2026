@@ -1,192 +1,124 @@
-# MLH PE Hackathon — Flask + Peewee + PostgreSQL Template
+## URL Shortener API
 
-A minimal hackathon starter template. You get the scaffolding and database wiring — you build the models, routes, and CSV loading logic.
+A REST API for creating and managing shortened URLs, built with Flask, Peewee ORM, and PostgreSQL.
 
-**Stack:** Flask · Peewee ORM · PostgreSQL · uv
-
-## **Important**
-
-You need to work with around the seed files that you can find in [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform. This will help you build the schema for the database and have some data to do some testing and submit your project for judging. If you need help with this, reach out on Discord or on the Q&A tab on the platform.
+## Architecture
+┌─────────┐     HTTP      ┌───────────┐     Peewee ORM     ┌────────────┐
+│ Client  │ ────────────▶ │   Flask   │ ─────────────────▶ │ PostgreSQL │
+│ (curl/  │ ◀──────────── │    App    │ ◀───────────────── │            │
+│ browser)│   JSON/302    └───────────┘                     └────────────┘
+│
+│ logs to
+▼
+stdout (JSON)
+**Components:**
+- **Client** — anything making HTTP requests (browser, curl, another service)
+- **Flask** — receives requests, runs route logic, returns JSON responses
+- **Peewee ORM** — translates Python model operations into SQL queries
+- **PostgreSQL** — stores users, URLs, and events persistently
+- **JSON logging** — every request is logged as structured JSON to stdout
 
 ## Prerequisites
 
-- **uv** — a fast Python package manager that handles Python versions, virtual environments, and dependencies automatically.
-  Install it with:
-  ```bash
-  # macOS / Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+- Python 3.13+
+- PostgreSQL running locally
+- uv (Python package manager)
 
-  # Windows (PowerShell)
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-  For other methods see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-- PostgreSQL running locally (you can use Docker or a local instance)
-
-## uv Basics
-
-`uv` manages your Python version, virtual environment, and dependencies automatically — no manual `python -m venv` needed.
-
-| Command | What it does |
-|---------|--------------|
-| `uv sync` | Install all dependencies (creates `.venv` automatically) |
-| `uv run <script>` | Run a script using the project's virtual environment |
-| `uv add <package>` | Add a new dependency |
-| `uv remove <package>` | Remove a dependency |
-
-## Quick Start
-
+Install uv:
 ```bash
-# 1. Clone the repo
-git clone <repo-url> && cd mlh-pe-hackathon
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# 2. Install dependencies
+## Setup
+```bash
+1. Clone the repo
+git clone https://github.com/May2367/MLH-Production-Engineering-Hackathon-2026.git
+cd MLH-Production-Engineering-Hackathon-2026
+
+2. Install dependencies
 uv sync
 
-# 3. Create the database
-createdb hackathon_db
+3. Start PostgreSQL
+sudo service postgresql start
 
-# 4. Configure environment
-cp .env.example .env   # edit if your DB credentials differ
+4. Create the database
+sudo -u postgres createdb hackathon_db
 
-# 5. Run the server
+5. Configure environment
+cp .env.example .env
+
+6. Load seed data
+uv run load_data.py
+
+7. Start the server
 uv run run.py
-
-# 6. Verify
-curl http://localhost:5000/health
-# → {"status":"ok"}
 ```
 
-## Project Structure
+## Environment Variables
 
-```
-mlh-pe-hackathon/
-├── app/
-│   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
-│   ├── models/
-│   │   └── __init__.py      # Import your models here
-│   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
-├── pyproject.toml           # Project metadata + dependencies
-├── run.py                   # Entry point: uv run run.py
-└── README.md
-```
+| Variable | Default | Description |
+|---|---|---|
+| FLASK_DEBUG | false | Enable debug mode (set to false in production) |
+| DATABASE_NAME | hackathon_db | PostgreSQL database name |
+| DATABASE_HOST | localhost | Database host |
+| DATABASE_PORT | 5432 | Database port |
+| DATABASE_USER | postgres | Database user |
+| DATABASE_PASSWORD | postgres | Database password |
 
-## How to Add a Model
+## API Endpoints
 
-1. Create a file in `app/models/`, e.g. `app/models/product.py`:
+| Method | Path | Description |
+|---|---|---|
+| GET | /health | Health check — returns 200 if app is running |
+| GET | /metrics | CPU, memory, and disk usage stats |
+| GET | /urls | List all shortened URLs |
+| GET | /urls/<id> | Get a single URL by ID |
+| POST | /urls | Create a new shortened URL |
+| GET | /<short_code> | Redirect to the original URL |
+| GET | /users | List all users |
+| GET | /users/<id> | Get a single user by ID |
+| GET | /events | List all events |
+| GET | /events/<id> | Get a single event by ID |
 
-```python
-from peewee import CharField, DecimalField, IntegerField
-
-from app.database import BaseModel
-
-
-class Product(BaseModel):
-    name = CharField()
-    category = CharField()
-    price = DecimalField(decimal_places=2)
-    stock = IntegerField()
+### POST /urls — Example Request
+```bash
+curl -X POST http://127.0.0.1:5000/urls \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 1, "short_code": "abc123", "original_url": "https://example.com"}'
 ```
 
-2. Import it in `app/models/__init__.py`:
+## Running Tests
+```bash
+# Run tests
+uv run pytest tests/ -v
 
-```python
-from app.models.product import Product
+# Run with coverage report
+uv run pytest tests/ -v --cov=app --cov-report=term-missing
 ```
 
-3. Create the table (run once in a Python shell or a setup script):
+## Troubleshooting
 
-```python
-from app.database import db
-from app.models.product import Product
-
-db.create_tables([Product])
+**`createdb: command not found`**
+PostgreSQL CLI tools aren't in your PATH. Install with:
+```bash
+sudo apt install postgresql postgresql-client
 ```
 
-## How to Add Routes
-
-1. Create a blueprint in `app/routes/`, e.g. `app/routes/products.py`:
-
-```python
-from flask import Blueprint, jsonify
-from playhouse.shortcuts import model_to_dict
-
-from app.models.product import Product
-
-products_bp = Blueprint("products", __name__)
-
-
-@products_bp.route("/products")
-def list_products():
-    products = Product.select()
-    return jsonify([model_to_dict(p) for p in products])
+**`password authentication failed for user "postgres"`**
+Set the postgres user password to match your .env:
+```bash
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 ```
 
-2. Register it in `app/routes/__init__.py`:
-
-```python
-def register_routes(app):
-    from app.routes.products import products_bp
-    app.register_blueprint(products_bp)
+**`relation "url" does not exist`**
+Tables haven't been created yet. Run:
+```bash
+uv run load_data.py
 ```
 
-## How to Load CSV Data
-
-```python
-import csv
-from peewee import chunked
-from app.database import db
-from app.models.product import Product
-
-def load_csv(filepath):
-    with open(filepath, newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    with db.atomic():
-        for batch in chunked(rows, 100):
-            Product.insert_many(batch).execute()
+**Port 5000 already in use**
+Another process is using the port. Find and kill it:
+```bash
+sudo lsof -i :5000
+kill -9 <PID>
 ```
-
-## Useful Peewee Patterns
-
-```python
-from peewee import fn
-from playhouse.shortcuts import model_to_dict
-
-# Select all
-products = Product.select()
-
-# Filter
-cheap = Product.select().where(Product.price < 10)
-
-# Get by ID
-p = Product.get_by_id(1)
-
-# Create
-Product.create(name="Widget", category="Tools", price=9.99, stock=50)
-
-# Convert to dict (great for JSON responses)
-model_to_dict(p)
-
-# Aggregations
-avg_price = Product.select(fn.AVG(Product.price)).scalar()
-total = Product.select(fn.SUM(Product.stock)).scalar()
-
-# Group by
-from peewee import fn
-query = (Product
-         .select(Product.category, fn.COUNT(Product.id).alias("count"))
-         .group_by(Product.category))
-```
-
-## Tips
-
-- Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
-- Wrap bulk inserts in `db.atomic()` for transactional safety and performance.
-- The template uses `teardown_appcontext` for connection cleanup, so connections are closed even when requests fail.
-- Check `.env.example` for all available configuration options.
