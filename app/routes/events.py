@@ -65,3 +65,26 @@ def create_event():
         return jsonify(model_to_dict(event)), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+@events_bp.route("/events/bulk", methods=["POST"])
+def bulk_load_events():
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+
+    if not data or "file" not in data:
+        return jsonify({"error": "Missing file field"}), 400
+
+    try:
+        from peewee import chunked
+        with open(f"data/{data['file']}", newline="") as f:
+            rows = list(csv.DictReader(f))
+        with db.atomic():
+            for batch in chunked(rows, 100):
+                Event.insert_many(batch).on_conflict_ignore().execute()
+        return jsonify({"message": f"Loaded {len(rows)} events", "row_count": len(rows)}), 201
+    except FileNotFoundError:
+        return jsonify({"error": f"File not found: {data['file']}"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400

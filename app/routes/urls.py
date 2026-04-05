@@ -16,6 +16,12 @@ def generate_short_code(length=6):
         if not Url.select().where(Url.short_code == code).exists():
             return code
 
+def url_to_dict(url):
+    d = model_to_dict(url)
+    if "user" in d and isinstance(d["user"], dict):
+        d["user_id"] = d["user"]["id"]
+        del d["user"]
+    return d
 
 @urls_bp.route("/urls", methods=["GET"])
 def list_urls():
@@ -33,14 +39,14 @@ def list_urls():
     per_page = int(request.args.get("per_page", 50))
     query = query.paginate(page, per_page)
 
-    return jsonify([model_to_dict(u) for u in query])
+    return jsonify([url_to_dict(u) for u in query])
 
 
 @urls_bp.route("/urls/<int:url_id>", methods=["GET"])
 def get_url(url_id):
     try:
         url = Url.get_by_id(url_id)
-        return jsonify(model_to_dict(url))
+        return jsonify(url_to_dict(url))
     except Url.DoesNotExist:
         return jsonify({"error": "URL not found"}), 404
 
@@ -67,10 +73,34 @@ def create_url():
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
-        return jsonify(model_to_dict(url)), 201
+        return jsonify(url_to_dict(url)), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+@urls_bp.route("/urls/bulk", methods=["POST"])
+def bulk_load_urls():
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+
+    if not data or "file" not in data:
+        return jsonify({"error": "Missing file field"}), 400
+
+    try:
+        from peewee import chunked
+        with open(f"data/{data['file']}", newline="") as f:
+            rows = list(csv.DictReader(f))
+        for r in rows:
+            r['is_active'] = r['is_active'] == 'True'
+        with db.atomic():
+            for batch in chunked(rows, 100):
+                Url.insert_many(batch).on_conflict_ignore().execute()
+        return jsonify({"message": f"Loaded {len(rows)} urls", "row_count": len(rows)}), 201
+    except FileNotFoundError:
+        return jsonify({"error": f"File not found: {data['file']}"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @urls_bp.route("/urls/<int:url_id>", methods=["PUT"])
 def update_url(url_id):
@@ -94,7 +124,7 @@ def update_url(url_id):
 
     url.updated_at = datetime.utcnow()
     url.save()
-    return jsonify(model_to_dict(url)), 200
+    return jsonify(url_to_dict(url)), 200
 
 
 @urls_bp.route("/urls/<int:url_id>", methods=["DELETE"])

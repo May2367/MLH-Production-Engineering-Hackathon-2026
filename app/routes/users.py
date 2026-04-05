@@ -84,7 +84,11 @@ def delete_user(user_id):
 
 @users_bp.route("/users/bulk", methods=["POST"])
 def bulk_load_users():
-    data = request.get_json()
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict() or request.get_json(force=True, silent=True)
+
     if not data or "file" not in data:
         return jsonify({"error": "Missing file field"}), 400
 
