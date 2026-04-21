@@ -1,4 +1,8 @@
+import os
 import pytest
+
+os.environ["DATABASE_NAME"] = "hackathon_test_db"
+
 from app import create_app
 from app.database import db
 from app.models.user import User
@@ -12,16 +16,14 @@ def app():
 
     with app.app_context():
         db.create_tables([User, Url, Event], safe=True)
-        
-        yield app
-        
-        db.drop_tables([Event, Url, User])
 
+        yield app
+
+        db.drop_tables([Event, Url, User])
 
 @pytest.fixture
 def client(app):
     return app.test_client()
-
 
 @pytest.fixture
 def sample_user(app):
@@ -32,7 +34,6 @@ def sample_user(app):
             created_at="2024-01-01 00:00:00"
         )
         return user
-
 
 @pytest.fixture
 def sample_url(app, sample_user):
